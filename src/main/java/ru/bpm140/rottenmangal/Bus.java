@@ -1,4 +1,4 @@
-package ru.bpm140;
+package ru.bpm140.rottenmangal;
 
 import java.util.HashMap;
 

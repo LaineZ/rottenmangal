@@ -1,4 +1,4 @@
-package ru.bpm140;
+package ru.bpm140.rottenmangal;
 
 public class Packet {
     public int destinationAddress;

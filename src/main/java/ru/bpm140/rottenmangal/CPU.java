@@ -1,32 +1,33 @@
-package ru.bpm140;
+package ru.bpm140.rottenmangal;
 
 import java.io.IOException;
 import java.util.Arrays;
 
 public class CPU {
+    // Memory map
     private static final int RAM_BASE = 0x00000000;
     private static final int RAM_SIZE = 1*1024*1024;
     private static final int MMIO_BASE = 0x10000000;
-
-    // CPU STATE
-    public final int[] x = new int[32]; // registers
-    public int pc = 0;
-    public boolean running = true;
-    int mepc = 0;
-    int mcause = 0;
-    int mtvec = 0x00000000;
-
-    boolean mie = true;   // global interrupt enable
-    boolean inTrap = false;
-    int pendingInterrupts = 0;
-    int cycle = 0;
-    private byte[] ram = new byte[RAM_SIZE];
-
     private static final int BUS_CTRL = MMIO_BASE;
     private static final int BUS_ADDRESS_SELECT = MMIO_BASE + 0x4;
     private static final int BUS_DATA = MMIO_BASE + 0x8;
+    private final byte[] ram = new byte[RAM_SIZE];
+
+    // CPU State
+    public final int[] x = new int[32]; // registers
+    public int pc = 0; // program counter
+    int mepc = 0; // machine exception program counter
+    int mcause = 0; // cause
+    int mtvec = 0x00000000;
+
+    // interrupts
+    boolean mie = true;   // global interrupt enable
+    boolean inTrap = false;
+    int pendingInterrupts = 0;
+
     private Packet packet = null;
     public Bus bus = new Bus();
+    public CPUStatus status = new CPUStatus();
 
     public int load8(int addr) {
         // RAM
@@ -34,10 +35,8 @@ public class CPU {
             return ram[addr - RAM_BASE] & 0xFF;
         }
 
-        dumpRegisters();
-        throw new RuntimeException(
-                String.format("LOAD fault addr=0x%08X pc=0x%08X", addr, pc)
-        );
+        status.setFault(CPUStatus.FaultCause.LOAD_FAULT);
+        return 0;
     }
 
     public int load16(int addr) {
@@ -58,31 +57,29 @@ public class CPU {
             // 0x0 - RESET
             if (value == 0) {
                 packet = null;
-                return;
             }
 
             if (value == 0x1 || value == 0x2) {
                 packet = new Packet();
                 packet.read = value == 0x1; // 0x1 - means read, 0x2 - write
-                return;
             }
 
             // Send packet when CTL register == 3
             if (value == 0x3 && packet != null) {
                 bus.send(packet);
                 store8(BUS_CTRL, 0x0);
-                return;
             }
+
+            return;
         }
 
         if (addr == BUS_ADDRESS_SELECT) {
             if (packet != null) {
                 packet.destinationAddress = value;
-                return;
             } else {
-                dumpRegisters();
-                throw new RuntimeException("BUS CONTROL is not initialized yet");
+                status.setFault(CPUStatus.FaultCause.UNINITIALIZED_BUS_CONTROL);
             }
+            return;
         }
 
         // RAM
@@ -91,10 +88,7 @@ public class CPU {
             return;
         }
 
-        dumpRegisters();
-        throw new RuntimeException(
-                String.format("STORE fault addr=0x%08X pc=0x%08X", addr, pc)
-        );
+        status.setFault(CPUStatus.FaultCause.STORE_FAULT);
     }
 
     public void store16(int addr, int value) {
@@ -104,15 +98,19 @@ public class CPU {
 
     public void store32(int addr, int value) {
         if (addr == BUS_DATA) {
-            if (packet != null && !packet.read) {
-                packet.value = value;
-            } else if (packet == null) {
-                dumpRegisters();
-                throw new RuntimeException("BUS CONTROL not initialized for write to BUS_DATA");
-            } else {
-                dumpRegisters();
-                throw new RuntimeException("Cannot write to BUS_DATA when read operation is set");
+            if (packet == null) {
+                status.setFault(CPUStatus.FaultCause.UNINITIALIZED_BUS_CONTROL);
+                return;
             }
+
+            if (packet.read) {
+                status.setFault(CPUStatus.FaultCause.BUS_CONTROL_WRITE_ON_READ);
+                return;
+            }
+
+            packet.value = value;
+            bus.send(packet);
+            store8(BUS_CTRL, 0x0);
             return;
         }
 
@@ -169,34 +167,50 @@ public class CPU {
         }
 
         pc = e_entry;
+        // FIXME: Setup stack size from firmware / boot ROM?
         x[2] = RAM_BASE + RAM_SIZE - 0x1000;
+    }
+
+    private boolean takeInterruptIfNeeded() {
+        if (!mie || inTrap || pendingInterrupts == 0) {
+            return false;
+        }
+
+        handleInterrupt();
+        return true;
     }
 
     private void handleInterrupt() {
         System.out.println("TRAP");
         inTrap = true;
 
-        // save state
-        mepc = pc;
-
         // find first pending interrupt
         int irq = Integer.numberOfTrailingZeros(pendingInterrupts);
         pendingInterrupts &= ~(1 << irq);
-        System.out.printf("mtvec=%08X irq=%d\n", mtvec, irq);
+        mepc = pc;
         mcause = 0x80000000 | irq; // high bit = interrupt
+        mie = false;
+        int mode = mtvec & 0x3;
+        int base = mtvec & ~0x3;
 
-        // jump to handler
-        pc = mtvec + irq * 4;
+        System.out.printf("mtvec=%08X irq=%d\n", mtvec, irq);
+
+        if (mode == 0) {
+            pc = base; // direct
+        } else {
+            pc = base + irq * 4; // vectored
+        }
     }
 
-    public void step() {
-        if (cycle % 1000 == 0) {
-            //pendingInterrupts |= (1 << 0);
-            cycle = 0;
-        }
+    public CPUStatus getStatus() {
+        return status;
+    }
 
-        if (mie && pendingInterrupts != 0 && !inTrap) {
-            handleInterrupt();
+    /**
+     * Steps CPU to one instruction cycle
+     */
+    public void step() {
+        if (takeInterruptIfNeeded()) {
             return;
         }
 
@@ -234,30 +248,17 @@ public class CPU {
                     pc = mepc;
                     inTrap = false;
                 } else if (funct12 == 0x000) {
-                    System.out.println("Ecal stub: " + funct12);
-                } else {
                     System.out.println("Halt!");
-                    running = false;
+                    status.setHalted();
+                } else {
+                    System.out.println("Ecal stub: " + funct12);
                 }
             }
 
-            default -> {
-                System.err.printf(
-                        "Unknown opcode 0x%02X at PC=0x%08X\n",
-                        opcode,
-                        oldPc
-                );
-                running = false;
-            }
+            default -> status.setFault(CPUStatus.FaultCause.UNKNOWN_OPCODE);
         }
-
-        cycle += 1;
         // x0 is always zero
         x[0] = 0;
-        if (opcode == 0x6F || opcode == 0x67) {
-            //System.out.printf("JUMP pc=%08X -> %08X\n", oldPc, pc);
-        }
-//       System.out.printf("PC=%08X instr=%08X pending=%d inTrap=%b\n", pc, load32(pc), pendingInterrupts, inTrap);
     }
 
     private void execOpImm(int instr) {
@@ -284,21 +285,11 @@ public class CPU {
                 } else if (funct7 == 0x20) {
                     x[rd] = x[rs1] >> shamt; // SRAI
                 } else {
-                    System.err.println("Bad SHIFT OP-IMM");
-                    running = false;
+                    status.setFault(CPUStatus.FaultCause.BAD_SHIFT_OP_IMM);
                 }
             }
-
-            default -> {
-                System.err.println("Unsupported OP-IMM funct3=" + funct3);
-                running = false;
-            }
+            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP_IMM);
         }
-
-//        System.out.printf(
-//                "OP-IMM: rd=%d rs1=%d funct3=%X imm=%X instr=%08X\n",
-//                rd, rs1, funct3, imm, instr
-//        );
     }
 
     private void execOp(int instr) {
@@ -371,11 +362,7 @@ public class CPU {
                     x[rd] = Integer.remainderUnsigned(x[rs1], x[rs2]);
                 }
             }
-
-            default -> {
-                System.err.println("Unsupported M extension OP");
-                running = false;
-            }
+            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
         }
     }
 
@@ -387,8 +374,7 @@ public class CPU {
                 } else if (funct7 == 0x20) {
                     x[rd] = x[rs1] - x[rs2]; // SUB
                 } else {
-                    System.err.println("Unsupported OP");
-                    running = false;
+                    status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
                 }
             }
             case 0x1 -> x[rd] = x[rs1] << (x[rs2] & 31); // SLL
@@ -401,16 +387,12 @@ public class CPU {
                 } else if (funct7 == 0x20) {
                     x[rd] = x[rs1] >> (x[rs2] & 31); // SRA
                 } else {
-                    System.err.println("Unsupported OP");
-                    running = false;
+                    status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
                 }
             }
             case 0x6 -> x[rd] = x[rs1] | x[rs2]; // OR
             case 0x7 -> x[rd] = x[rs1] & x[rs2]; // AND
-            default -> {
-                System.err.println("Unsupported OP");
-                running = false;
-            }
+            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
         }
     }
 
@@ -432,11 +414,7 @@ public class CPU {
             case 0x2 -> x[rd] = load32(addr); // LW
             case 0x4 -> x[rd] = load8(addr) & 0xFF; // LBU
             case 0x5 -> x[rd] = load16(addr) & 0xFFFF; // LHU
-
-            default -> {
-                System.err.printf("Unsupported LOAD: %08X", funct3);
-                running = false;
-            }
+            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_LOAD);
         }
 
 //        System.out.printf(
@@ -446,7 +424,6 @@ public class CPU {
     }
 
     private void execStore(int instr) {
-
         int funct3 = (instr >> 12) & 0x7;
         int rs1 = (instr >> 15) & 0x1F;
         int rs2 = (instr >> 20) & 0x1F;
@@ -460,17 +437,10 @@ public class CPU {
         int addr = x[rs1] + imm;
 
         switch (funct3) {
-
             case 0x0 -> store8(addr, x[rs2]); // SB
-
             case 0x1 -> store16(addr, x[rs2]); // SH
-
             case 0x2 -> store32(addr, x[rs2]); // SW
-
-            default -> {
-                System.err.println("Unsupported STORE");
-                running = false;
-            }
+            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_STORE);
         }
 
 //        System.out.printf(

@@ -1,7 +1,7 @@
-package ru.bpm140.devices;
+package ru.bpm140.rottenmangal.devices;
 
-import ru.bpm140.Device;
-import ru.bpm140.Packet;
+import ru.bpm140.rottenmangal.Device;
+import ru.bpm140.rottenmangal.Packet;
 
 public class FramebufferDevice implements Device {
     public final byte[] fb;
