@@ -1,4 +1,4 @@
-package ru.bpm140.rottenmangal;
+package ru.bpm140.rottenmangal.interfaces;
 import java.util.OptionalInt;
 
 public interface ICSR {

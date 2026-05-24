@@ -1,5 +1,7 @@
 package ru.bpm140.rottenmangal;
 
+import ru.bpm140.rottenmangal.interfaces.Device;
+
 import java.util.HashMap;
 
 public class Bus {

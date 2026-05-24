@@ -1,6 +1,6 @@
 package ru.bpm140.rottenmangal.devices;
 
-import ru.bpm140.rottenmangal.Device;
+import ru.bpm140.rottenmangal.interfaces.Device;
 import ru.bpm140.rottenmangal.Packet;
 
 public class FramebufferDevice implements Device {

@@ -1,5 +1,7 @@
 package ru.bpm140.rottenmangal;
 
+import ru.bpm140.rottenmangal.interfaces.ICSR;
+
 import java.util.OptionalInt;
 
 public class InterruptController implements ICSR {
@@ -15,11 +17,11 @@ public class InterruptController implements ICSR {
 
     private static final int MIE  = 1 << 3;   // global interrupt enable
     private static final int MPIE = 1 << 7;   // previous interrupt enable
+    static final int MPP  = 3 << 11;
 
     public void raise(int irq) {
         mip |= (1 << irq);
     }
-
     public void clear(int irq) {
         mip &= ~(1 << irq);
     }
@@ -38,17 +40,26 @@ public class InterruptController implements ICSR {
     }
 
     public int trap(int pc, int cause, int tval) {
-
         // save context
         mepc = pc;
         mcause = cause;
         mtval = tval;
 
         // save/disable interrupts (RISC-V behavior)
-        mstatus = (mstatus & ~MPIE) | ((mstatus & MIE) << 4);
+        boolean mie = (mstatus & MIE) != 0;
+
+        if (mie) {
+            mstatus |= MPIE;
+        }
+        else {
+            mstatus &= ~MPIE;
+        }
+
         mstatus &= ~MIE;
+        mstatus = (mstatus & ~MPP) | (3 << 11);
 
         // compute vector
+        //System.out.printf("mstatus=%08X mtvec=%08X\n", mstatus, mtvec);
         return dispatchVector(cause);
     }
 
@@ -69,12 +80,23 @@ public class InterruptController implements ICSR {
     private int getVectorBase() {
         return mtvec & ~0x3;
     }
+
     public int mretPC() {
-        // restore interrupt enable state
-        mstatus = (mstatus & ~MIE) | ((mstatus & MPIE) >> 4);
+        // restore MIE from MPIE
+        if ((mstatus & MPIE) != 0) {
+            mstatus |= MIE;
+        } else {
+            mstatus &= ~MIE;
+        }
+
+        mstatus |= MPIE;
+
+        // clear MPP (optional but correct)
+        mstatus &= ~(3 << 11);
 
         return mepc;
     }
+
     @Override
     public OptionalInt readCSR(int addr) {
         return switch (addr) {
@@ -91,6 +113,7 @@ public class InterruptController implements ICSR {
 
     @Override
     public boolean writeCSR(int addr, int val) {
+        //System.out.printf("write_csr=%08X\n", addr);
         switch (addr) {
             case 0x304 -> { mie = val; return true; }
             case 0x305 -> { mtvec = val & ~0x3; return true; }
@@ -99,7 +122,11 @@ public class InterruptController implements ICSR {
             case 0x342 -> { mcause = val; return true; }
             case 0x343 -> { mtval = val; return true; }
 
-            case 0x300 -> { mstatus = val; return true; }
+            case 0x300 -> {
+                //System.out.printf("write_mstatus=%08X\n", mstatus);
+                mstatus = val;
+                return true;
+            }
 
             case 0x344 -> {
                 mip &= ~val; // write-1-to-clear
