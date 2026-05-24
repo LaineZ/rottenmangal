@@ -6,7 +6,7 @@ import java.util.Arrays;
 public class CPU {
     // Memory map
     private static final int RAM_BASE = 0x00000000;
-    private static final int RAM_SIZE = 1*1024*1024;
+    private static final int RAM_SIZE = 1 * 1024 * 1024;
     private static final int MMIO_BASE = 0x10000000;
     private static final int BUS_CTRL = MMIO_BASE;
     private static final int BUS_ADDRESS_SELECT = MMIO_BASE + 0x4;
@@ -16,18 +16,76 @@ public class CPU {
     // CPU State
     public final int[] x = new int[32]; // registers
     public int pc = 0; // program counter
-    int mepc = 0; // machine exception program counter
-    int mcause = 0; // cause
-    int mtvec = 0x00000000;
-
     // interrupts
-    boolean mie = true;   // global interrupt enable
     boolean inTrap = false;
-    int pendingInterrupts = 0;
 
     private Packet packet = null;
+    public InterruptController interruptController = new InterruptController();
     public Bus bus = new Bus();
     public CPUStatus status = new CPUStatus();
+
+    public CPUStatus getStatus() {
+        return status;
+    }
+
+    public void loadBinary(byte[] program, int address) {
+        System.arraycopy(program, 0, ram, address, program.length);
+        x[2] = RAM_BASE + RAM_SIZE - 0x1000;
+        pc = address;
+    }
+
+    public void loadELF(byte[] elf) throws IOException {
+        if (elf[0] != 0x7F || elf[1] != 'E' || elf[2] != 'L' || elf[3] != 'F')
+            throw new IllegalArgumentException("Not an ELF file");
+
+        int e_type = readHalf(elf, 0x10);
+        int e_machine = readHalf(elf, 0x12);
+        int e_entry = readWord(elf, 0x18);
+        int e_phoff = readWord(elf, 0x1C);
+        int e_phnum = readHalf(elf, 0x2C);
+        int e_phentsize = readHalf(elf, 0x2A);
+
+        for (int i = 0; i < e_phnum; i++) {
+            int offset = e_phoff + i * e_phentsize;
+            int p_type = readWord(elf, offset);
+            if (p_type != 1) continue;
+
+            int p_vaddr = readWord(elf, offset + 0x08);
+            int p_filesz = readWord(elf, offset + 0x10);
+            int p_memsz = readWord(elf, offset + 0x14);
+            int p_offset = readWord(elf, offset + 0x04);
+
+            if (p_vaddr + p_memsz > ram.length) {
+                throw new RuntimeException("Segment exceeds RAM");
+            }
+            System.arraycopy(elf, p_offset, ram, p_vaddr, p_filesz);
+
+            if (p_memsz > p_filesz) {
+                Arrays.fill(ram, p_vaddr + p_filesz, p_vaddr + p_memsz, (byte) 0);
+            }
+        }
+
+        pc = e_entry;
+        // FIXME: Setup stack size from firmware / boot ROM?
+        x[2] = RAM_BASE + RAM_SIZE - 0x1000;
+    }
+
+    public int csrRead(int addr) {
+        // TODO: Make some registry for CSR's?
+        var value = interruptController.readCSR(addr);
+
+        if (value.isPresent()) {
+            return value.getAsInt();
+        } else {
+            return 0; // FIXME
+        }
+    }
+
+    public void csrWrite(int addr, int value) {
+        // TODO: Make some registry for CSR's?
+        // TODO: Check for write
+        interruptController.writeCSR(addr, value);
+    }
 
     public int load8(int addr) {
         // RAM
@@ -35,7 +93,7 @@ public class CPU {
             return ram[addr - RAM_BASE] & 0xFF;
         }
 
-        status.setFault(CPUStatus.FaultCause.LOAD_FAULT);
+        enterException(CPUStatus.ExceptionCause.LOAD_FAULT, addr);
         return 0;
     }
 
@@ -61,7 +119,7 @@ public class CPU {
 
             if (value == 0x1 || value == 0x2) {
                 packet = new Packet();
-                packet.read = value == 0x1; // 0x1 - means read, 0x2 - write
+                packet.read = value == 0x1; // 0x1 - means read, 0x2 - writeCSR
             }
 
             // Send packet when CTL register == 3
@@ -77,7 +135,7 @@ public class CPU {
             if (packet != null) {
                 packet.destinationAddress = value;
             } else {
-                status.setFault(CPUStatus.FaultCause.UNINITIALIZED_BUS_CONTROL);
+                enterException(CPUStatus.ExceptionCause.UNINITIALIZED_BUS_CONTROL, addr);
             }
             return;
         }
@@ -88,7 +146,7 @@ public class CPU {
             return;
         }
 
-        status.setFault(CPUStatus.FaultCause.STORE_FAULT);
+        enterException(CPUStatus.ExceptionCause.LOAD_FAULT, addr);
     }
 
     public void store16(int addr, int value) {
@@ -99,12 +157,12 @@ public class CPU {
     public void store32(int addr, int value) {
         if (addr == BUS_DATA) {
             if (packet == null) {
-                status.setFault(CPUStatus.FaultCause.UNINITIALIZED_BUS_CONTROL);
+                enterException(CPUStatus.ExceptionCause.UNINITIALIZED_BUS_CONTROL, addr);
                 return;
             }
 
             if (packet.read) {
-                status.setFault(CPUStatus.FaultCause.BUS_CONTROL_WRITE_ON_READ);
+                enterException(CPUStatus.ExceptionCause.BUS_CONTROL_WRITE_ON_READ, addr);
                 return;
             }
 
@@ -121,104 +179,32 @@ public class CPU {
         store8(addr + 3, value >> 24);
     }
 
-    public void loadBinary(byte[] program, int address) {
-        System.arraycopy(program, 0, ram, address, program.length);
-        x[2] = RAM_BASE + RAM_SIZE - 0x1000;
-        pc = address;
-    }
-
-    private int readHalf(byte[] data, int off) {
-        return (data[off] & 0xFF) | ((data[off+1] & 0xFF) << 8);
-    }
-    private int readWord(byte[] data, int off) {
-        return (data[off] & 0xFF) | ((data[off+1] & 0xFF) << 8) |
-                ((data[off+2] & 0xFF) << 16) | ((data[off+3] & 0xFF) << 24);
-    }
-
-    public void loadELF(byte[] elf) throws IOException {
-        if (elf[0] != 0x7F || elf[1] != 'E' || elf[2] != 'L' || elf[3] != 'F')
-            throw new IllegalArgumentException("Not an ELF file");
-
-        int e_type = readHalf(elf, 0x10);
-        int e_machine = readHalf(elf, 0x12);
-        int e_entry = readWord(elf, 0x18);
-        int e_phoff = readWord(elf, 0x1C);
-        int e_phnum = readHalf(elf, 0x2C);
-        int e_phentsize = readHalf(elf, 0x2A);
-
-        for (int i = 0; i < e_phnum; i++) {
-            int offset = e_phoff + i * e_phentsize;
-            int p_type = readWord(elf, offset + 0x00);
-            if (p_type != 1) continue;
-
-            int p_vaddr  = readWord(elf, offset + 0x08);
-            int p_filesz = readWord(elf, offset + 0x10);
-            int p_memsz  = readWord(elf, offset + 0x14);
-            int p_offset = readWord(elf, offset + 0x04);
-
-            if (p_vaddr + p_memsz > ram.length) {
-                throw new RuntimeException("Segment exceeds RAM");
-            }
-            System.arraycopy(elf, p_offset, ram, p_vaddr, p_filesz);
-
-            if (p_memsz > p_filesz) {
-                Arrays.fill(ram, p_vaddr + p_filesz, p_vaddr + p_memsz, (byte)0);
-            }
-        }
-
-        pc = e_entry;
-        // FIXME: Setup stack size from firmware / boot ROM?
-        x[2] = RAM_BASE + RAM_SIZE - 0x1000;
-    }
-
-    private boolean takeInterruptIfNeeded() {
-        if (!mie || inTrap || pendingInterrupts == 0) {
-            return false;
-        }
-
-        handleInterrupt();
-        return true;
+    void enterException(CPUStatus.ExceptionCause cause, int trapValue) {
+        pc = interruptController.trap(pc, cause.getRiscVExceptionCode(), trapValue);
+        System.out.printf("EXCEPTION=%08X value=%08X PC=%08X\n", interruptController.mcause, trapValue, pc);
     }
 
     private void handleInterrupt() {
-        System.out.println("TRAP");
-        inTrap = true;
-
-        // find first pending interrupt
-        int irq = Integer.numberOfTrailingZeros(pendingInterrupts);
-        pendingInterrupts &= ~(1 << irq);
-        mepc = pc;
-        mcause = 0x80000000 | irq; // high bit = interrupt
-        mie = false;
-        int mode = mtvec & 0x3;
-        int base = mtvec & ~0x3;
-
-        System.out.printf("mtvec=%08X irq=%d\n", mtvec, irq);
-
-        if (mode == 0) {
-            pc = base; // direct
-        } else {
-            pc = base + irq * 4; // vectored
-        }
-    }
-
-    public CPUStatus getStatus() {
-        return status;
+        int irq = interruptController.takeInterrupt();
+        pc = interruptController.trap(pc, 0x80000000 | irq, 0);
     }
 
     /**
      * Steps CPU to one instruction cycle
      */
     public void step() {
-        if (takeInterruptIfNeeded()) {
+        if (status.getRunningState() == CPUStatus.CPUState.FAULT || status.getRunningState() == CPUStatus.CPUState.HALTED) {
             return;
         }
 
-        int instr = load32(pc);
+        if (interruptController.hasInterrupt(inTrap)) {
+            handleInterrupt();
+            return;
+        }
+
         int oldPc = pc;
-
+        int instr = load32(pc);
         pc += 4;
-
         int opcode = instr & 0x7F;
 
         switch (opcode) {
@@ -242,27 +228,104 @@ public class CPU {
             case 0x17 -> execAuipc(instr, oldPc);
             // SYSTEM
             case 0x73 -> {
-                int funct12 = (instr >> 20) & 0xFFF;
+                int funct3 = (instr >>> 12) & 0x7;
+                int funct12 = (instr >>> 20) & 0xFFF;
+                int rd = (instr >>> 7) & 0x1F;
+                int rs1 = (instr >>> 15) & 0x1F;
+                int csrAddr = (instr >>> 20) & 0xFFF;
 
-                if (funct12 == 0x302) {
-                    pc = mepc;
-                    inTrap = false;
-                } else if (funct12 == 0x000) {
-                    System.out.println("Halt!");
-                    status.setHalted();
-                } else {
-                    System.out.println("Ecal stub: " + funct12);
+                if (funct3 == 0) {
+                    switch (funct12) {
+                        case 0x302 -> {
+                            System.out.println("mret");
+                            pc = interruptController.mretPC();
+                            inTrap = false;
+                            return;
+                        }
+
+                        case 0x0 -> {
+                            handleSyscall();
+                            return;
+                        }
+
+                        case 0x1 -> {
+                            pc = interruptController.trap(oldPc, CPUStatus.ExceptionCause.BREAKPOINT.getRiscVExceptionCode(), 0);
+                            return;
+                        }
+
+                        default -> {
+                            enterException(CPUStatus.ExceptionCause.UNKNOWN_OPCODE, instr);
+                            return;
+                        }
+                    }
+                }
+
+                int imm = rs1;
+                switch (funct3) {
+                    case 0x1 -> {
+                        int old = csrRead(csrAddr);
+                        if (rd != 0) x[rd] = old;
+                        csrWrite(csrAddr, x[rs1]);
+                    }
+                    case 0x2 -> {
+                        int old = csrRead(csrAddr);
+                        if (rd != 0) x[rd] = old;
+                        csrWrite(csrAddr, old | x[rs1]);
+                    }
+                    case 0x3 -> {
+                        int old = csrRead(csrAddr);
+                        if (rd != 0) x[rd] = old;
+                        csrWrite(csrAddr, old & ~x[rs1]);
+                    }
+                    case 0x5 -> {
+                        int old = csrRead(csrAddr);
+                        if (rd != 0) x[rd] = old;
+                        csrWrite(csrAddr, imm);
+                    }
+                    case 0x6 -> {
+                        int old = csrRead(csrAddr);
+                        if (rd != 0) x[rd] = old;
+                        csrWrite(csrAddr, old | imm);
+                    }
+                    case 0x7 -> {
+                        int old = csrRead(csrAddr);
+                        if (rd != 0) x[rd] = old;
+                        csrWrite(csrAddr, old & ~imm);
+                    }
+
+                    default -> enterException(CPUStatus.ExceptionCause.UNKNOWN_OPCODE, funct3);
                 }
             }
 
-            default -> status.setFault(CPUStatus.FaultCause.UNKNOWN_OPCODE);
+            default -> enterException(CPUStatus.ExceptionCause.UNKNOWN_OPCODE, opcode);
         }
         // x0 is always zero
         x[0] = 0;
     }
 
-    private void execOpImm(int instr) {
+    private void debugPortWrite(int ptr, int len) {
+        for (int i = 0; i < len; i++) {
+            int ch = load8(ptr + i);
+            System.out.print((char) ch); // TODO: Switch to something else
+        }
+    }
 
+    private void handleSyscall() {
+        // syscall arguments
+        int a7 = x[17];
+        int a0 = x[10];
+        int a1 = x[11];
+
+        //System.out.printf("SYS_WRITE ptr=%08X len=%d\n", a0, a1);
+
+        switch (a7) {
+            case 1 -> debugPortWrite(a0, a1);
+            case 2 -> status.setHalted();
+            default -> System.out.println("ECAL stub: " + a7);
+        }
+    }
+
+    private void execOpImm(int instr) {
         int rd = (instr >> 7) & 0x1F;
         int funct3 = (instr >> 12) & 0x7;
         int rs1 = (instr >> 15) & 0x1F;
@@ -285,14 +348,14 @@ public class CPU {
                 } else if (funct7 == 0x20) {
                     x[rd] = x[rs1] >> shamt; // SRAI
                 } else {
-                    status.setFault(CPUStatus.FaultCause.BAD_SHIFT_OP_IMM);
+                    enterException(CPUStatus.ExceptionCause.BAD_SHIFT_OP_IMM, funct7);
                 }
             }
-            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP_IMM);
+            default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP_IMM, funct3);
         }
     }
 
-    private void execOp(int instr) {
+    void execOp(int instr) {
         int rd = (instr >> 7) & 0x1F;
         int funct3 = (instr >> 12) & 0x7;
         int rs1 = (instr >> 15) & 0x1F;
@@ -313,18 +376,18 @@ public class CPU {
             case 0x1 -> { // MULH
                 long a = x[rs1];
                 long b = x[rs2];
-                x[rd] = (int)((a * b) >> 32);
+                x[rd] = (int) ((a * b) >> 32);
             }
             case 0x2 -> { // MULHSU
                 long a = x[rs1];
                 long b = Integer.toUnsignedLong(x[rs2]);
-                x[rd] = (int)((a * b) >> 32);
+                x[rd] = (int) ((a * b) >> 32);
             }
 
             case 0x3 -> { // MULHU
                 long a = Integer.toUnsignedLong(x[rs1]);
                 long b = Integer.toUnsignedLong(x[rs2]);
-                x[rd] = (int)((a * b) >> 32);
+                x[rd] = (int) ((a * b) >> 32);
             }
 
             case 0x4 -> { // DIV
@@ -362,7 +425,7 @@ public class CPU {
                     x[rd] = Integer.remainderUnsigned(x[rs1], x[rs2]);
                 }
             }
-            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
+            default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct3);
         }
     }
 
@@ -374,7 +437,7 @@ public class CPU {
                 } else if (funct7 == 0x20) {
                     x[rd] = x[rs1] - x[rs2]; // SUB
                 } else {
-                    status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
+                    enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct3);
                 }
             }
             case 0x1 -> x[rd] = x[rs1] << (x[rs2] & 31); // SLL
@@ -387,12 +450,12 @@ public class CPU {
                 } else if (funct7 == 0x20) {
                     x[rd] = x[rs1] >> (x[rs2] & 31); // SRA
                 } else {
-                    status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
+                    enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct7);
                 }
             }
             case 0x6 -> x[rd] = x[rs1] | x[rs2]; // OR
             case 0x7 -> x[rd] = x[rs1] & x[rs2]; // AND
-            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_OP);
+            default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct3);
         }
     }
 
@@ -414,7 +477,7 @@ public class CPU {
             case 0x2 -> x[rd] = load32(addr); // LW
             case 0x4 -> x[rd] = load8(addr) & 0xFF; // LBU
             case 0x5 -> x[rd] = load16(addr) & 0xFFFF; // LHU
-            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_LOAD);
+            default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_LOAD, funct3);
         }
 
 //        System.out.printf(
@@ -440,7 +503,7 @@ public class CPU {
             case 0x0 -> store8(addr, x[rs2]); // SB
             case 0x1 -> store16(addr, x[rs2]); // SH
             case 0x2 -> store32(addr, x[rs2]); // SW
-            default -> status.setFault(CPUStatus.FaultCause.UNSUPPORTED_STORE);
+            default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_STORE, funct3);
         }
 
 //        System.out.printf(
@@ -450,7 +513,6 @@ public class CPU {
     }
 
     private void execBranch(int instr, int oldPc) {
-
         int funct3 = (instr >> 12) & 0x7;
         int rs1 = (instr >> 15) & 0x1F;
         int rs2 = (instr >> 20) & 0x1F;
@@ -474,7 +536,6 @@ public class CPU {
         };
 
 
-
         if (take) {
             pc = oldPc + imm;
         }
@@ -482,7 +543,6 @@ public class CPU {
     }
 
     private void execJal(int instr, int oldPc) {
-
         int rd = (instr >> 7) & 0x1F;
 
         int imm =
@@ -498,7 +558,6 @@ public class CPU {
     }
 
     private void execJalr(int instr, int oldPc) {
-
         int rd = (instr >> 7) & 0x1F;
         int rs1 = (instr >> 15) & 0x1F;
         int imm = signExtend(instr >> 20, 12);
@@ -509,25 +568,28 @@ public class CPU {
     }
 
     private void execLui(int instr) {
-
         int rd = (instr >> 7) & 0x1F;
-
         x[rd] = instr & 0xFFFFF000;
     }
 
     private void execAuipc(int instr, int oldPc) {
-
         int rd = (instr >> 7) & 0x1F;
-
         x[rd] = oldPc + (instr & 0xFFFFF000);
     }
 
     // utils
     private int signExtend(int value, int bits) {
-
         int shift = 32 - bits;
-
         return (value << shift) >> shift;
+    }
+
+    private int readHalf(byte[] data, int off) {
+        return (data[off] & 0xFF) | ((data[off + 1] & 0xFF) << 8);
+    }
+
+    private int readWord(byte[] data, int off) {
+        return (data[off] & 0xFF) | ((data[off + 1] & 0xFF) << 8) |
+                ((data[off + 2] & 0xFF) << 16) | ((data[off + 3] & 0xFF) << 24);
     }
 
     public void dumpRegisters() {
@@ -540,7 +602,5 @@ public class CPU {
                     x[i]
             );
         }
-
-        System.out.printf("PC=%08X pending=%d\n", pc, pendingInterrupts);
     }
 }

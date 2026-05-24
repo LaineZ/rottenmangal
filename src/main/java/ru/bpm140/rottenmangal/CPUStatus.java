@@ -4,11 +4,13 @@ public class CPUStatus {
     public enum CPUState {
         RUNNING,
         HALTED,
+        EXCEPTION,
         FAULT
     }
 
-    public enum FaultCause {
+    public enum ExceptionCause {
         NONE,
+        BREAKPOINT,
         LOAD_FAULT,
         STORE_FAULT,
         UNINITIALIZED_BUS_CONTROL,
@@ -24,6 +26,7 @@ public class CPUStatus {
         public int getRiscVExceptionCode() {
             switch (this) {
                 case NONE -> { return 0; } // SCARY!!!
+                case BREAKPOINT -> { return 3; }
                 case LOAD_FAULT, UNSUPPORTED_LOAD -> { return 5; }
                 case STORE_FAULT, UNSUPPORTED_STORE -> { return 7; }
                 case UNINITIALIZED_BUS_CONTROL -> { return 24; }
@@ -35,16 +38,16 @@ public class CPUStatus {
     }
 
     CPUState status;
-    FaultCause faultCause;
+    ExceptionCause cause;
 
     public CPUStatus() {
         this.status = CPUState.HALTED;
-        this.faultCause = FaultCause.NONE;
+        this.cause = ExceptionCause.NONE;
     }
 
-    public void setFault(FaultCause cause) {
-        this.status = CPUState.FAULT;
-        this.faultCause = cause;
+    public void setException(ExceptionCause cause) {
+        this.status = CPUState.EXCEPTION;
+        this.cause = cause;
     }
 
     public void setRunning() {
@@ -59,7 +62,15 @@ public class CPUStatus {
         this.status = CPUState.HALTED;
     }
 
+    public CPUState getRunningState() {
+        return status;
+    }
+
     public CPUState getStatus() {
         return this.status;
+    }
+
+    public ExceptionCause getCause() {
+        return cause;
     }
 }
