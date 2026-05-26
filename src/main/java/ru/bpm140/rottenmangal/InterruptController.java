@@ -26,8 +26,9 @@ public class InterruptController implements ICSR {
         mip &= ~(1 << irq);
     }
 
-    public boolean hasInterrupt(boolean inTrap) {
-        return !inTrap && ((mip & mie) != 0);
+    public boolean hasInterrupt() {
+        boolean globalMie = (mstatus & MIE) != 0;
+        return globalMie && ((mip & mie) != 0);
     }
 
     public int takeInterrupt() {
@@ -90,8 +91,6 @@ public class InterruptController implements ICSR {
         }
 
         mstatus |= MPIE;
-
-        // clear MPP (optional but correct)
         mstatus &= ~(3 << 11);
 
         return mepc;

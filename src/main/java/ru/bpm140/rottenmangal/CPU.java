@@ -1,6 +1,4 @@
 package ru.bpm140.rottenmangal;
-
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,12 +8,11 @@ public class CPU {
     private static final int BUS_CTRL = MMIO_BASE;
     private static final int BUS_ADDRESS_SELECT = MMIO_BASE + 0x4;
     private static final int BUS_DATA = MMIO_BASE + 0x8;
+    private static final int TIMER_IRQ = 7;
 
     // CPU State
     public final int[] x = new int[32]; // registers
     public int pc = 0; // program counter
-    // interrupts
-    boolean inTrap = false;
 
     private Packet packet = null;
     public List<MemoryRegion> memory = new ArrayList<>();
@@ -23,6 +20,7 @@ public class CPU {
     public Bus bus = new Bus();
     public CPUStatus status = new CPUStatus();
 
+    private int cycle = 0;
     private MemoryRegion findRegion(int addr) {
         for (MemoryRegion r : memory) {
             if (r.contains(addr)) return r;
@@ -43,7 +41,7 @@ public class CPU {
         r.data[offset] = value;
     }
 
-    public void loadELF(byte[] elf) throws IOException {
+    public void loadELF(byte[] elf) throws IllegalArgumentException {
         if (elf[0] != 0x7F || elf[1] != 'E' || elf[2] != 'L' || elf[3] != 'F')
             throw new IllegalArgumentException("Not an ELF file");
 
@@ -53,6 +51,14 @@ public class CPU {
         int e_phoff = readWord(elf, 0x1C);
         int e_phnum = readHalf(elf, 0x2C);
         int e_phentsize = readHalf(elf, 0x2A);
+
+        if (e_type != 2) { // 2 is binary
+            throw new IllegalArgumentException("ELF file is not executable");
+        }
+
+        if (e_machine != 243) { // RISC-V have a 243 machine type
+            throw new IllegalArgumentException("ELF file is not intended for RISC-V architecture");
+        }
 
         for (int i = 0; i < e_phnum; i++) {
             int offset = e_phoff + i * e_phentsize;
@@ -194,6 +200,7 @@ public class CPU {
 
     private void handleInterrupt() {
         int irq = interruptController.takeInterrupt();
+        if (irq < 0) return;
         pc = interruptController.trap(pc, 0x80000000 | irq, 0);
     }
 
@@ -201,11 +208,20 @@ public class CPU {
      * Steps CPU to one instruction cycle
      */
     public void step() {
+        cycle++;
+
+        if (cycle >= 10) {
+            cycle = 0;
+            interruptController.raise(TIMER_IRQ);
+        }
+
         if (status.getRunningState() == CPUStatus.CPUState.FAULT || status.getRunningState() == CPUStatus.CPUState.HALTED) {
             return;
         }
 
-        if (interruptController.hasInterrupt(inTrap)) {
+        //System.out.println("mip=" + interruptController.mip + " mie=" + interruptController.mie + " &=" + (interruptController.mip & interruptController.mie));
+        if (interruptController.hasInterrupt()) {
+            //System.out.println("Has int");
             handleInterrupt();
             return;
         }
@@ -245,8 +261,9 @@ public class CPU {
                 if (funct3 == 0) {
                     switch (funct12) {
                         case 0x302 -> {
+                            System.out.println("Going mret");
                             pc = interruptController.mretPC();
-                            inTrap = false;
+                            System.out.println("MRET");
                             return;
                         }
 
