@@ -215,13 +215,11 @@ public class CPU {
             interruptController.raise(TIMER_IRQ);
         }
 
-        if (status.getRunningState() == CPUStatus.CPUState.FAULT || status.getRunningState() == CPUStatus.CPUState.HALTED) {
+        if (status.getRunningState() == CPUStatus.CPUState.FAULT || status.getRunningState() == CPUStatus.CPUState.HALTED || status.getRunningState() == CPUStatus.CPUState.HALT_TEST_PASS) {
             return;
         }
 
-        //System.out.println("mip=" + interruptController.mip + " mie=" + interruptController.mie + " &=" + (interruptController.mip & interruptController.mie));
         if (interruptController.hasInterrupt()) {
-            //System.out.println("Has int");
             handleInterrupt();
             return;
         }
@@ -261,9 +259,7 @@ public class CPU {
                 if (funct3 == 0) {
                     switch (funct12) {
                         case 0x302 -> {
-                            System.out.println("Going mret");
                             pc = interruptController.mretPC();
-                            System.out.println("MRET");
                             return;
                         }
 
@@ -362,12 +358,19 @@ public class CPU {
         int a0 = x[10];
         int a1 = x[11];
 
-        //System.out.printf("SYS_WRITE ptr=%08X len=%d\n", a0, a1);
+        System.out.println("ECALL: " + a7 + " A0" + a0);
 
         switch (a7) {
             case 1 -> debugPortWrite(a0, a1);
             case 2 -> status.setHalted();
-            case 93 -> status.status = CPUStatus.CPUState.HALT_TEST_PASS;
+            // https://github.com/PhilippRados/ruscv/blob/master/src/cpu.rs#L162-L170
+            case 93 -> {
+                if (a0 == 0) {
+                    status.status = CPUStatus.CPUState.HALT_TEST_PASS;
+                } else {
+                    status.status = CPUStatus.CPUState.HALTED;
+                }
+            }
             default -> System.out.printf("unknown ECALL called at %08X A7: %d\n", pc, a7);
         }
     }
