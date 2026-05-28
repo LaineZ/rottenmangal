@@ -12,7 +12,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-add");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -23,7 +23,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-addi");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -34,7 +34,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-and");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -45,7 +45,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-andi");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -56,7 +56,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-auipc");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -67,7 +67,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-beq");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -78,7 +78,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-bge");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -89,7 +89,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-bgeu");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -100,7 +100,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-blt");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -111,7 +111,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-bltu");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -122,7 +122,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-bne");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -133,7 +133,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-fence_i");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -144,7 +144,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-jal");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -155,7 +155,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-jalr");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -166,7 +166,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-lb");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -177,7 +177,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-lbu");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -188,7 +188,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-ld_st");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -199,7 +199,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-lh");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -210,7 +210,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-lhu");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -221,7 +221,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-lui");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -232,7 +232,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-lw");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -243,7 +243,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-ma_data");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -254,7 +254,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-or");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -265,7 +265,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-ori");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -276,7 +276,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sb");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -287,7 +287,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sh");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -298,7 +298,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-simple");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -309,7 +309,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sll");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -320,7 +320,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-slli");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -331,7 +331,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-slt");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -342,7 +342,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-slti");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -353,7 +353,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sltiu");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -364,7 +364,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sltu");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -375,7 +375,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sra");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -386,7 +386,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-srai");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -397,7 +397,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-srl");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -408,7 +408,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-srli");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -419,7 +419,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-st_ld");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -430,7 +430,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sub");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -441,7 +441,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-sw");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -452,7 +452,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-xor");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);
@@ -463,7 +463,7 @@ public class RV32UITest {
         try {
             var cpu = CPUUtils.instantiateCPU("rv32ui-p-xori");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);

@@ -12,7 +12,7 @@ public class RottenMangalTest {
         try {
             var cpu = CPUUtils.instantiateCPU("rottenmangal-ebreak-trap");
             CPUUtils.runUntilExit(cpu);
-            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getStatus().status);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
 
         } catch (Exception e) {
             assertFalse(false);

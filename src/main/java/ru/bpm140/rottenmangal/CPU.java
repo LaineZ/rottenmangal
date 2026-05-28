@@ -11,9 +11,8 @@ public class CPU {
     private static final int TIMER_IRQ = 7;
 
     // CPU State
-    public final int[] x = new int[32]; // registers
-    public int pc = 0; // program counter
-
+    private final int[] x = new int[32]; // registers
+    private int pc = 0; // program counter
     private Packet packet = null;
     public List<MemoryRegion> memory = new ArrayList<>();
     public InterruptController interruptController = new InterruptController();
@@ -30,6 +29,10 @@ public class CPU {
 
     public CPUStatus getStatus() {
         return status;
+    }
+
+    public CPUStatus.CPUState getState() {
+        return status.getState();
     }
 
     private void flatMemWrite(int addr, byte value) {
@@ -215,7 +218,7 @@ public class CPU {
             interruptController.raise(TIMER_IRQ);
         }
 
-        if (status.getRunningState() == CPUStatus.CPUState.FAULT || status.getRunningState() == CPUStatus.CPUState.HALTED || status.getRunningState() == CPUStatus.CPUState.HALT_TEST_PASS) {
+        if (!status.isRunning()) {
             return;
         }
 
@@ -366,9 +369,9 @@ public class CPU {
             // https://github.com/PhilippRados/ruscv/blob/master/src/cpu.rs#L162-L170
             case 93 -> {
                 if (a0 == 0) {
-                    status.status = CPUStatus.CPUState.HALT_TEST_PASS;
+                    status.setState(CPUStatus.CPUState.HALT_TEST_PASS);
                 } else {
-                    status.status = CPUStatus.CPUState.HALTED;
+                    status.setState(CPUStatus.CPUState.HALTED);
                 }
             }
             default -> System.out.printf("unknown ECALL called at %08X A7: %d\n", pc, a7);

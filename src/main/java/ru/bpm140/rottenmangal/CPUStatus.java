@@ -40,37 +40,45 @@ public class CPUStatus {
         }
     }
 
-    public CPUState status;
+    private CPUState state;
     ExceptionCause cause;
 
     public CPUStatus() {
-        this.status = CPUState.HALTED;
+        this.state = CPUState.HALTED;
         this.cause = ExceptionCause.NONE;
     }
 
     public void setException(ExceptionCause cause) {
-        this.status = CPUState.EXCEPTION;
+        this.state = CPUState.EXCEPTION;
         this.cause = cause;
     }
 
+    void setState(CPUState state) {
+        if (state == CPUState.EXCEPTION) {
+            throw new IllegalArgumentException("CPU state exception can only set with `setExceptionArgument`");
+        }
+
+        this.state = state;
+    }
+
     public void setRunning() {
-        this.status = CPUState.RUNNING;
+        this.state = CPUState.RUNNING;
     }
 
     public boolean isRunning() {
-        return this.status == CPUState.RUNNING;
+        return this.state == CPUState.RUNNING;
     }
 
     public void setHalted() {
-        this.status = CPUState.HALTED;
+        this.state = CPUState.HALTED;
     }
 
     public CPUState getRunningState() {
-        return status;
+        return state;
     }
 
-    public CPUState getStatus() {
-        return this.status;
+    public CPUState getState() {
+        return this.state;
     }
 
     public ExceptionCause getCause() {
