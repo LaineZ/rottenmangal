@@ -287,15 +287,15 @@ public class CPU {
             // STORE
             case 0x23 -> execStore(instr);
             // BRANCH
-            case 0x63 -> execBranch(instr, oldPc);
+            case 0x63 -> execBranch(instr);
             // JAL
-            case 0x6F -> execJal(instr, oldPc);
+            case 0x6F -> execJal(instr);
             // JALR
-            case 0x67 -> execJalr(instr, oldPc);
+            case 0x67 -> execJalr(instr);
             // LUI
             case 0x37 -> execLui(instr);
             // AUIPC
-            case 0x17 -> execAuipc(instr, oldPc);
+            case 0x17 -> execAuipc(instr);
             // SYSTEM
             case 0x73 -> {
                 int funct3 = (instr >>> 12) & 0x7;
@@ -605,7 +605,7 @@ public class CPU {
 //        );
     }
 
-    private void execBranch(int instr, int oldPc) {
+    private void execBranch(int instr) {
         int funct3 = (instr >> 12) & 0x7;
         int rs1 = (instr >> 15) & 0x1F;
         int rs2 = (instr >> 20) & 0x1F;
@@ -635,7 +635,7 @@ public class CPU {
         //System.out.printf("BRANCH pc=%08X take=%b\n", oldPc, take);
     }
 
-    private void execJal(int instr, int oldPc) {
+    private void execJal(int instr) {
         int rd = (instr >> 7) & 0x1F;
 
         int imm =
@@ -650,7 +650,7 @@ public class CPU {
         pc = oldPc + imm;
     }
 
-    private void execJalr(int instr, int oldPc) {
+    private void execJalr(int instr) {
         int rd = (instr >> 7) & 0x1F;
         int rs1 = (instr >> 15) & 0x1F;
         int imm = signExtend(instr >> 20, 12);
@@ -665,7 +665,7 @@ public class CPU {
         registers[rd] = instr & 0xFFFFF000;
     }
 
-    private void execAuipc(int instr, int oldPc) {
+    private void execAuipc(int instr) {
         int rd = (instr >> 7) & 0x1F;
         registers[rd] = oldPc + (instr & 0xFFFFF000);
     }
