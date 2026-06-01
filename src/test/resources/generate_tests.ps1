@@ -4,9 +4,7 @@ Get-ChildItem "rv32ui-p-*" | ForEach-Object {
     $camel = ($lastPart.Substring(0,1).ToUpper() + $lastPart.Substring(1).ToLower())
 
     Get-ChildItem $_ -File | ForEach-Object {
-
         $baseName = [System.IO.Path]::GetFileNameWithoutExtension($_.Name)
-
 @"
 @Test
 void RV32UI$camel() {

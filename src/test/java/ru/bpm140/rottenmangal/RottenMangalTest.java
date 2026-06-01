@@ -18,4 +18,16 @@ public class RottenMangalTest {
             assertFalse(false);
         }
     }
+
+    @Test
+    void RottenMangalExceptionTorture() {
+        try {
+            var cpu = CPUUtils.instantiateCPU("rottenmangal-exception-torture");
+            CPUUtils.runUntilExit(cpu);
+            assertEquals(CPUStatus.CPUState.HALT_TEST_PASS, cpu.getState());
+
+        } catch (Exception e) {
+            assertFalse(false);
+        }
+    }
 }

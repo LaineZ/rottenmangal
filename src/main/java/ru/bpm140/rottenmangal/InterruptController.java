@@ -5,15 +5,13 @@ import ru.bpm140.rottenmangal.interfaces.ICSR;
 import java.util.OptionalInt;
 
 public class InterruptController implements ICSR {
-    public int mip = 0;   // pending interrupts
-    public int mie = 0;   // enabled interrupts
-
-    public int mtvec = 0x0;
-
-    public int mepc;
-    public int mcause;
-    public int mtval;
-    public int mstatus;
+    int mip = 0;   // pending interrupts
+    int mie = 0;   // enabled interrupts
+    int mtvec = 0x0;
+    int mepc;
+    int mcause;
+    int mtval;
+    int mstatus;
 
     private static final int MIE  = 1 << 3;   // global interrupt enable
     private static final int MPIE = 1 << 7;   // previous interrupt enable

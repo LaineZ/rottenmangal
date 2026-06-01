@@ -11,15 +11,17 @@ public class CPU {
     private static final int TIMER_IRQ = 7;
 
     // CPU State
-    private final int[] x = new int[32]; // registers
-    private int pc = 0; // program counter
+    int[] registers = new int[32];
+    int pc = 0; // program counter
+    int oldPc = 0; // old pc
     private Packet packet = null;
     public List<MemoryRegion> memory = new ArrayList<>();
     public InterruptController interruptController = new InterruptController();
     public Bus bus = new Bus();
-    public CPUStatus status = new CPUStatus();
-
+    private CPUStatus.CPUState state = CPUStatus.CPUState.HALTED;
+    private CPUStatus.ExceptionCause exceptionCause = CPUStatus.ExceptionCause.NONE;
     private int cycle = 0;
+
     private MemoryRegion findRegion(int addr) {
         for (MemoryRegion r : memory) {
             if (r.contains(addr)) return r;
@@ -27,12 +29,28 @@ public class CPU {
         return null;
     }
 
-    public CPUStatus getStatus() {
-        return status;
+    public void restoreFromSnapshot(CPUSnapshot snapshot) {
+        this.pc = snapshot.pc;
+        this.registers = snapshot.registers.clone();
+        this.interruptController.mip = snapshot.mip;
+        this.interruptController.mie = snapshot.mie;
+        this.interruptController.mtvec = snapshot.mtvec;
+        this.interruptController.mepc = snapshot.mepc;
+        this.interruptController.mcause = snapshot.mcause;
+        this.interruptController.mtval = snapshot.mtval;
+        this.interruptController.mstatus = snapshot.mstatus;
+    }
+
+    public CPUSnapshot takeSnapshot() {
+        return new CPUSnapshot(this);
     }
 
     public CPUStatus.CPUState getState() {
-        return status.getState();
+        return state;
+    }
+
+    public void setRunning() {
+        state = CPUStatus.CPUState.RUNNING;
     }
 
     private void flatMemWrite(int addr, byte value) {
@@ -102,29 +120,43 @@ public class CPU {
         interruptController.writeCSR(addr, value);
     }
 
-    public int load8(int addr) {
+    public Integer load8(int addr) {
         MemoryRegion r = findRegion(addr);
         if (r != null && r.read) {
             return r.data[r.offset(addr)] & 0xFF;
         }
 
         enterException(CPUStatus.ExceptionCause.LOAD_FAULT, addr);
-        return 0;
+        return null;
     }
 
-    public int load16(int addr) {
-        return load8(addr)
-                | (load8(addr + 1) << 8);
+    public Integer load16(int addr) {
+        Integer b0 = load8(addr);
+        if (b0 == null) return null;
+
+        Integer b1 = load8(addr + 1);
+        if (b1 == null) return null;
+
+        return b0 | (b1 << 8);
     }
 
-    public int load32(int addr) {
-        return load8(addr)
-                | (load8(addr + 1) << 8)
-                | (load8(addr + 2) << 16)
-                | (load8(addr + 3) << 24);
+    public Integer load32(int addr) {
+        Integer b0 = load8(addr);
+        if (b0 == null) return null;
+
+        Integer b1 = load8(addr + 1);
+        if (b1 == null) return null;
+
+        Integer b2 = load8(addr + 2);
+        if (b2 == null) return null;
+
+        Integer b3 = load8(addr + 3);
+        if (b3 == null) return null;
+
+        return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
     }
 
-    public void store8(int addr, int value) {
+    public boolean store8(int addr, int value) {
         // BUS CONTROL
         if (addr == BUS_CTRL) {
             // 0x0 - RESET
@@ -143,7 +175,7 @@ public class CPU {
                 store8(BUS_CTRL, 0x0);
             }
 
-            return;
+            return true;
         }
 
         if (addr == BUS_ADDRESS_SELECT) {
@@ -151,21 +183,26 @@ public class CPU {
                 packet.destinationAddress = value;
             } else {
                 enterException(CPUStatus.ExceptionCause.UNINITIALIZED_BUS_CONTROL, addr);
+                return false;
             }
-            return;
+            return true;
         }
 
         MemoryRegion r = findRegion(addr);
         if (r != null && r.write) {
             r.data[r.offset(addr)] = (byte) value;
-            return;
+            return true;
         }
 
-        enterException(CPUStatus.ExceptionCause.LOAD_FAULT, addr);
+        enterException(CPUStatus.ExceptionCause.STORE_FAULT, addr);
+        return false;
     }
 
     public void store16(int addr, int value) {
-        store8(addr, value);
+        if (!store8(addr, value)) {
+            return;
+        }
+
         store8(addr + 1, value >> 8);
     }
 
@@ -188,15 +225,23 @@ public class CPU {
         }
 
         // Other
-        store8(addr, value);
-        store8(addr + 1, value >> 8);
-        store8(addr + 2, value >> 16);
-        store8(addr + 3, value >> 24);
+        if (!store8(addr, value)) {
+            return;
+        }
+        if (!store8(addr + 1, value >> 8)) {
+            return;
+        }
+        if (!store8(addr + 2, value >> 16)) {
+            return;
+        }
+        if (!store8(addr + 3, value >> 24)) {
+            return;
+        }
     }
 
     void enterException(CPUStatus.ExceptionCause cause, int trapValue) {
-        var oldPc = pc;
-        pc = interruptController.trap(pc, cause.getRiscVExceptionCode(), trapValue);
+        pc = interruptController.trap(oldPc, cause.getRiscVExceptionCode(), trapValue);
+        exceptionCause = cause;
         System.out.printf("EXCEPTION=%08X value=%08X ExceptionPC=%08X HandlerPC=%08X CAUSE=%s\n",
                 interruptController.mcause, trapValue, oldPc, pc, cause);
     }
@@ -218,7 +263,7 @@ public class CPU {
             interruptController.raise(TIMER_IRQ);
         }
 
-        if (!status.isRunning()) {
+        if (state != CPUStatus.CPUState.RUNNING) {
             return;
         }
 
@@ -227,7 +272,7 @@ public class CPU {
             return;
         }
 
-        int oldPc = pc;
+        oldPc = pc;
         int instr = load32(pc);
         pc += 4;
         int opcode = instr & 0x7F;
@@ -272,9 +317,7 @@ public class CPU {
                         }
 
                         case 0x1 -> {
-                            //System.out.printf("trap call: pc=%08X oldPc=%08X mstatus_before=%08X\n", pc, oldPc, interruptController.mstatus);
-                            pc = interruptController.trap(pc, CPUStatus.ExceptionCause.BREAKPOINT.getRiscVExceptionCode(), 0);
-                            //System.out.printf("trap return: mstatus_after=%08X\n", interruptController.mstatus);
+                            enterException(CPUStatus.ExceptionCause.BREAKPOINT, 0);
                             return;
                         }
 
@@ -289,32 +332,32 @@ public class CPU {
                 switch (funct3) {
                     case 0x1 -> {
                         int old = csrRead(csrAddr);
-                        if (rd != 0) x[rd] = old;
-                        csrWrite(csrAddr, x[rs1]);
+                        if (rd != 0) registers[rd] = old;
+                        csrWrite(csrAddr, registers[rs1]);
                     }
                     case 0x2 -> {
                         int old = csrRead(csrAddr);
-                        if (rd != 0) x[rd] = old;
-                        csrWrite(csrAddr, old | x[rs1]);
+                        if (rd != 0) registers[rd] = old;
+                        csrWrite(csrAddr, old | registers[rs1]);
                     }
                     case 0x3 -> {
                         int old = csrRead(csrAddr);
-                        if (rd != 0) x[rd] = old;
-                        csrWrite(csrAddr, old & ~x[rs1]);
+                        if (rd != 0) registers[rd] = old;
+                        csrWrite(csrAddr, old & ~registers[rs1]);
                     }
                     case 0x5 -> {
                         int old = csrRead(csrAddr);
-                        if (rd != 0) x[rd] = old;
+                        if (rd != 0) registers[rd] = old;
                         csrWrite(csrAddr, imm);
                     }
                     case 0x6 -> {
                         int old = csrRead(csrAddr);
-                        if (rd != 0) x[rd] = old;
+                        if (rd != 0) registers[rd] = old;
                         csrWrite(csrAddr, old | imm);
                     }
                     case 0x7 -> {
                         int old = csrRead(csrAddr);
-                        if (rd != 0) x[rd] = old;
+                        if (rd != 0) registers[rd] = old;
                         csrWrite(csrAddr, old & ~imm);
                     }
 
@@ -323,18 +366,16 @@ public class CPU {
             }
             case 0xF -> {
                 // FENCE, do nothing, at least for now...
-                return;
             }
 
             case 0x0 -> {
-                // NOP?
-                return;
+                // NOP
             }
 
             default -> enterException(CPUStatus.ExceptionCause.UNKNOWN_OPCODE, opcode);
         }
         // x0 is always zero
-        x[0] = 0;
+        registers[0] = 0;
 //
 //        int v = load32(0x80001000);
 //
@@ -357,21 +398,21 @@ public class CPU {
 
     private void handleSyscall() {
         // syscall arguments
-        int a7 = x[17];
-        int a0 = x[10];
-        int a1 = x[11];
+        int a7 = registers[17];
+        int a0 = registers[10];
+        int a1 = registers[11];
 
         System.out.println("ECALL: " + a7 + " A0" + a0);
 
         switch (a7) {
             case 1 -> debugPortWrite(a0, a1);
-            case 2 -> status.setHalted();
+            case 2 -> state = CPUStatus.CPUState.HALTED;
             // https://github.com/PhilippRados/ruscv/blob/master/src/cpu.rs#L162-L170
             case 93 -> {
                 if (a0 == 0) {
-                    status.setState(CPUStatus.CPUState.HALT_TEST_PASS);
+                    state = CPUStatus.CPUState.HALT_TEST_PASS;
                 } else {
-                    status.setState(CPUStatus.CPUState.HALTED);
+                    state = CPUStatus.CPUState.HALTED;
                 }
             }
             default -> System.out.printf("unknown ECALL called at %08X A7: %d\n", pc, a7);
@@ -387,18 +428,18 @@ public class CPU {
         int funct7 = imm >>> 5;
 
         switch (funct3) {
-            case 0x0 -> x[rd] = x[rs1] + signExtend(imm, 12); // ADDI
-            case 0x2 -> x[rd] = (x[rs1] < imm) ? 1 : 0; // SLTI
-            case 0x3 -> x[rd] = (Integer.compareUnsigned(x[rs1], imm) < 0) ? 1 : 0; // SLTIU
-            case 0x4 -> x[rd] = x[rs1] ^ imm; // XORI
-            case 0x6 -> x[rd] = x[rs1] | imm; // ORI
-            case 0x7 -> x[rd] = x[rs1] & imm; // ANDI
-            case 0x1 -> x[rd] = x[rs1] << shamt; // SLLI
+            case 0x0 -> registers[rd] = registers[rs1] + signExtend(imm, 12); // ADDI
+            case 0x2 -> registers[rd] = (registers[rs1] < imm) ? 1 : 0; // SLTI
+            case 0x3 -> registers[rd] = (Integer.compareUnsigned(registers[rs1], imm) < 0) ? 1 : 0; // SLTIU
+            case 0x4 -> registers[rd] = registers[rs1] ^ imm; // XORI
+            case 0x6 -> registers[rd] = registers[rs1] | imm; // ORI
+            case 0x7 -> registers[rd] = registers[rs1] & imm; // ANDI
+            case 0x1 -> registers[rd] = registers[rs1] << shamt; // SLLI
             case 0x5 -> {
                 if (funct7 == 0x00) {
-                    x[rd] = x[rs1] >>> shamt; // SRLI
+                    registers[rd] = registers[rs1] >>> shamt; // SRLI
                 } else if (funct7 == 0x20) {
-                    x[rd] = x[rs1] >> shamt; // SRAI
+                    registers[rd] = registers[rs1] >> shamt; // SRAI
                 } else {
                     enterException(CPUStatus.ExceptionCause.BAD_SHIFT_OP_IMM, funct7);
                 }
@@ -424,57 +465,57 @@ public class CPU {
     private void execOpMul(int rd, int funct3, int rs1, int rs2) {
         // RV32M
         switch (funct3) {
-            case 0x0 -> x[rd] = x[rs1] * x[rs2]; // MUL
+            case 0x0 -> registers[rd] = registers[rs1] * registers[rs2]; // MUL
             case 0x1 -> { // MULH
-                long a = x[rs1];
-                long b = x[rs2];
-                x[rd] = (int) ((a * b) >> 32);
+                long a = registers[rs1];
+                long b = registers[rs2];
+                registers[rd] = (int) ((a * b) >> 32);
             }
             case 0x2 -> { // MULHSU
-                long a = x[rs1];
-                long b = Integer.toUnsignedLong(x[rs2]);
-                x[rd] = (int) ((a * b) >> 32);
+                long a = registers[rs1];
+                long b = Integer.toUnsignedLong(registers[rs2]);
+                registers[rd] = (int) ((a * b) >> 32);
             }
 
             case 0x3 -> { // MULHU
-                long a = Integer.toUnsignedLong(x[rs1]);
-                long b = Integer.toUnsignedLong(x[rs2]);
-                x[rd] = (int) ((a * b) >> 32);
+                long a = Integer.toUnsignedLong(registers[rs1]);
+                long b = Integer.toUnsignedLong(registers[rs2]);
+                registers[rd] = (int) ((a * b) >> 32);
             }
 
             case 0x4 -> { // DIV
-                if (x[rs2] == 0) {
-                    x[rd] = -1;
-                } else if (x[rs1] == Integer.MIN_VALUE && x[rs2] == -1) {
-                    x[rd] = Integer.MIN_VALUE;
+                if (registers[rs2] == 0) {
+                    registers[rd] = -1;
+                } else if (registers[rs1] == Integer.MIN_VALUE && registers[rs2] == -1) {
+                    registers[rd] = Integer.MIN_VALUE;
                 } else {
-                    x[rd] = x[rs1] / x[rs2];
+                    registers[rd] = registers[rs1] / registers[rs2];
                 }
             }
 
             case 0x5 -> { // DIVU
-                if (x[rs2] == 0) {
-                    x[rd] = -1;
+                if (registers[rs2] == 0) {
+                    registers[rd] = -1;
                 } else {
-                    x[rd] = Integer.divideUnsigned(x[rs1], x[rs2]);
+                    registers[rd] = Integer.divideUnsigned(registers[rs1], registers[rs2]);
                 }
             }
 
             case 0x6 -> { // REM
-                if (x[rs2] == 0) {
-                    x[rd] = x[rs1];
-                } else if (x[rs1] == Integer.MIN_VALUE && x[rs2] == -1) {
-                    x[rd] = 0;
+                if (registers[rs2] == 0) {
+                    registers[rd] = registers[rs1];
+                } else if (registers[rs1] == Integer.MIN_VALUE && registers[rs2] == -1) {
+                    registers[rd] = 0;
                 } else {
-                    x[rd] = x[rs1] % x[rs2];
+                    registers[rd] = registers[rs1] % registers[rs2];
                 }
             }
 
             case 0x7 -> { // REMU
-                if (x[rs2] == 0) {
-                    x[rd] = x[rs1];
+                if (registers[rs2] == 0) {
+                    registers[rd] = registers[rs1];
                 } else {
-                    x[rd] = Integer.remainderUnsigned(x[rs1], x[rs2]);
+                    registers[rd] = Integer.remainderUnsigned(registers[rs1], registers[rs2]);
                 }
             }
             default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct3);
@@ -485,28 +526,28 @@ public class CPU {
         switch (funct3) {
             case 0x0 -> {
                 if (funct7 == 0x00) {
-                    x[rd] = x[rs1] + x[rs2]; // ADD
+                    registers[rd] = registers[rs1] + registers[rs2]; // ADD
                 } else if (funct7 == 0x20) {
-                    x[rd] = x[rs1] - x[rs2]; // SUB
+                    registers[rd] = registers[rs1] - registers[rs2]; // SUB
                 } else {
                     enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct3);
                 }
             }
-            case 0x1 -> x[rd] = x[rs1] << (x[rs2] & 31); // SLL
-            case 0x2 -> x[rd] = (x[rs1] < x[rs2]) ? 1 : 0; // SLT
-            case 0x3 -> x[rd] = Integer.compareUnsigned(x[rs1], x[rs2]) < 0 ? 1 : 0; // SLTU
-            case 0x4 -> x[rd] = x[rs1] ^ x[rs2]; // XOR
+            case 0x1 -> registers[rd] = registers[rs1] << (registers[rs2] & 31); // SLL
+            case 0x2 -> registers[rd] = (registers[rs1] < registers[rs2]) ? 1 : 0; // SLT
+            case 0x3 -> registers[rd] = Integer.compareUnsigned(registers[rs1], registers[rs2]) < 0 ? 1 : 0; // SLTU
+            case 0x4 -> registers[rd] = registers[rs1] ^ registers[rs2]; // XOR
             case 0x5 -> {
                 if (funct7 == 0x00) {
-                    x[rd] = x[rs1] >>> (x[rs2] & 31); // SRL
+                    registers[rd] = registers[rs1] >>> (registers[rs2] & 31); // SRL
                 } else if (funct7 == 0x20) {
-                    x[rd] = x[rs1] >> (x[rs2] & 31); // SRA
+                    registers[rd] = registers[rs1] >> (registers[rs2] & 31); // SRA
                 } else {
                     enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct7);
                 }
             }
-            case 0x6 -> x[rd] = x[rs1] | x[rs2]; // OR
-            case 0x7 -> x[rd] = x[rs1] & x[rs2]; // AND
+            case 0x6 -> registers[rd] = registers[rs1] | registers[rs2]; // OR
+            case 0x7 -> registers[rd] = registers[rs1] & registers[rs2]; // AND
             default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_OP, funct3);
         }
     }
@@ -521,14 +562,14 @@ public class CPU {
             return;
         }
 
-        int addr = x[rs1] + imm;
+        int addr = registers[rs1] + imm;
 
         switch (funct3) {
-            case 0x0 -> x[rd] = signExtend(load8(addr), 8);   // LB
-            case 0x1 -> x[rd] = signExtend(load16(addr), 16);  // LH
-            case 0x2 -> x[rd] = load32(addr); // LW
-            case 0x4 -> x[rd] = load8(addr) & 0xFF; // LBU
-            case 0x5 -> x[rd] = load16(addr) & 0xFFFF; // LHU
+            case 0x0 -> registers[rd] = signExtend(load8(addr), 8);   // LB
+            case 0x1 -> registers[rd] = signExtend(load16(addr), 16);  // LH
+            case 0x2 -> registers[rd] = load32(addr); // LW
+            case 0x4 -> registers[rd] = load8(addr) & 0xFF; // LBU
+            case 0x5 -> registers[rd] = load16(addr) & 0xFFFF; // LHU
             default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_LOAD, funct3);
         }
 
@@ -549,12 +590,12 @@ public class CPU {
 
         imm = signExtend(imm, 12);
 
-        int addr = x[rs1] + imm;
+        int addr = registers[rs1] + imm;
 
         switch (funct3) {
-            case 0x0 -> store8(addr, x[rs2]); // SB
-            case 0x1 -> store16(addr, x[rs2]); // SH
-            case 0x2 -> store32(addr, x[rs2]); // SW
+            case 0x0 -> store8(addr, registers[rs2]); // SB
+            case 0x1 -> store16(addr, registers[rs2]); // SH
+            case 0x2 -> store32(addr, registers[rs2]); // SW
             default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_STORE, funct3);
         }
 
@@ -578,12 +619,12 @@ public class CPU {
         imm = signExtend(imm, 13);
 
         boolean take = switch (funct3) {
-            case 0x0 -> x[rs1] == x[rs2]; // BEQ
-            case 0x1 -> x[rs1] != x[rs2]; // BNE
-            case 0x4 -> x[rs1] < x[rs2]; // BLT
-            case 0x5 -> x[rs1] >= x[rs2]; // BGE
-            case 0x6 -> Integer.compareUnsigned(x[rs1], x[rs2]) < 0; // BLTU
-            case 0x7 -> Integer.compareUnsigned(x[rs1], x[rs2]) >= 0; // BGEU
+            case 0x0 -> registers[rs1] == registers[rs2]; // BEQ
+            case 0x1 -> registers[rs1] != registers[rs2]; // BNE
+            case 0x4 -> registers[rs1] < registers[rs2]; // BLT
+            case 0x5 -> registers[rs1] >= registers[rs2]; // BGE
+            case 0x6 -> Integer.compareUnsigned(registers[rs1], registers[rs2]) < 0; // BLTU
+            case 0x7 -> Integer.compareUnsigned(registers[rs1], registers[rs2]) >= 0; // BGEU
             default -> false;
         };
 
@@ -605,7 +646,7 @@ public class CPU {
 
         imm = signExtend(imm, 21);
 
-        x[rd] = oldPc + 4;
+        registers[rd] = oldPc + 4;
         pc = oldPc + imm;
     }
 
@@ -613,20 +654,20 @@ public class CPU {
         int rd = (instr >> 7) & 0x1F;
         int rs1 = (instr >> 15) & 0x1F;
         int imm = signExtend(instr >> 20, 12);
-        int target = (x[rs1] + imm) & ~1;
+        int target = (registers[rs1] + imm) & ~1;
 
-        x[rd] = oldPc + 4;
+        registers[rd] = oldPc + 4;
         pc = target;
     }
 
     private void execLui(int instr) {
         int rd = (instr >> 7) & 0x1F;
-        x[rd] = instr & 0xFFFFF000;
+        registers[rd] = instr & 0xFFFFF000;
     }
 
     private void execAuipc(int instr, int oldPc) {
         int rd = (instr >> 7) & 0x1F;
-        x[rd] = oldPc + (instr & 0xFFFFF000);
+        registers[rd] = oldPc + (instr & 0xFFFFF000);
     }
 
     // utils
@@ -642,17 +683,5 @@ public class CPU {
     private int readWord(byte[] data, int off) {
         return (data[off] & 0xFF) | ((data[off + 1] & 0xFF) << 8) |
                 ((data[off + 2] & 0xFF) << 16) | ((data[off + 3] & 0xFF) << 24);
-    }
-
-    public void dumpRegisters() {
-
-        for (int i = 0; i < 32; i++) {
-            System.out.printf(
-                    "x%-2d = 0x%08X (%d)\n",
-                    i,
-                    x[i],
-                    x[i]
-            );
-        }
     }
 }

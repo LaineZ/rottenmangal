@@ -5,8 +5,7 @@ public class CPUStatus {
         RUNNING,
         HALTED,
         HALT_TEST_PASS, // For tests
-        EXCEPTION,
-        FAULT
+        FAULT // Critical emulator fault
     }
 
     public enum ExceptionCause {
@@ -38,50 +37,5 @@ public class CPUStatus {
                 default -> { return 19; } // Hardware error
             }
         }
-    }
-
-    private CPUState state;
-    ExceptionCause cause;
-
-    public CPUStatus() {
-        this.state = CPUState.HALTED;
-        this.cause = ExceptionCause.NONE;
-    }
-
-    public void setException(ExceptionCause cause) {
-        this.state = CPUState.EXCEPTION;
-        this.cause = cause;
-    }
-
-    void setState(CPUState state) {
-        if (state == CPUState.EXCEPTION) {
-            throw new IllegalArgumentException("CPU state exception can only set with `setExceptionArgument`");
-        }
-
-        this.state = state;
-    }
-
-    public void setRunning() {
-        this.state = CPUState.RUNNING;
-    }
-
-    public boolean isRunning() {
-        return this.state == CPUState.RUNNING;
-    }
-
-    public void setHalted() {
-        this.state = CPUState.HALTED;
-    }
-
-    public CPUState getRunningState() {
-        return state;
-    }
-
-    public CPUState getState() {
-        return this.state;
-    }
-
-    public ExceptionCause getCause() {
-        return cause;
     }
 }
