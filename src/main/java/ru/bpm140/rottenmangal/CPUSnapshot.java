@@ -4,18 +4,22 @@ import java.io.*;
 
 public class CPUSnapshot {
     // CPU
-    public final int[] registers;
-    public final int pc;
+    public CPUStatus.CPUState state;
+    public int[] registers;
+    public int pc;
     // Interrupts
-    public final int mip;
-    public final int mie;
-    public final int mtvec;
-    public final int mepc;
-    public final int mcause;
-    public final int mtval;
-    public final int mstatus;
+    public int mip;
+    public int mie;
+    public int mtvec;
+    public int mepc;
+    public int mcause;
+    public int mtval;
+    public int mstatus;
+
+    public CPUSnapshot() {}
 
     CPUSnapshot(CPU cpu) {
+        state = cpu.getState();
         pc = cpu.pc;
         registers = cpu.registers.clone();
         mip = cpu.interruptController.mip;

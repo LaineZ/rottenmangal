@@ -22,20 +22,22 @@ public class CPUStatus {
         UNSUPPORTED_OP_IMM,
         UNSUPPORTED_OP,
         UNSUPPORTED_LOAD,
-        UNSUPPORTED_STORE;
+        UNSUPPORTED_STORE,
+        INSTRUCTION_ACCESS_FAULT;
 
         // Gets a RISC-V specified exception code, correspond to the RISC-V documentation
         public int getRiscVExceptionCode() {
-            switch (this) {
-                case NONE -> { return 0; } // SCARY!!!
-                case BREAKPOINT -> { return 3; }
-                case LOAD_FAULT, UNSUPPORTED_LOAD -> { return 5; }
-                case STORE_FAULT, UNSUPPORTED_STORE -> { return 7; }
-                case UNINITIALIZED_BUS_CONTROL -> { return 24; }
-                case BUS_CONTROL_WRITE_ON_READ -> { return 25; }
-                case UNKNOWN_OPCODE, BAD_SHIFT_OP_IMM, UNSUPPORTED_OP_IMM, UNSUPPORTED_OP, UNKNOWN_SYSCALL, UNKNOWN_CSR_MODE -> { return 2; }
-                default -> { return 19; } // Hardware error
-            }
+            return switch (this) {
+                case NONE -> 0;
+                case INSTRUCTION_ACCESS_FAULT -> 1;
+                case BREAKPOINT -> 3;
+                case LOAD_FAULT, UNSUPPORTED_LOAD -> 5;
+                case STORE_FAULT, UNSUPPORTED_STORE -> 7;
+                case UNINITIALIZED_BUS_CONTROL -> 24;
+                case BUS_CONTROL_WRITE_ON_READ -> 25;
+                case UNKNOWN_OPCODE, BAD_SHIFT_OP_IMM, UNSUPPORTED_OP_IMM, UNSUPPORTED_OP, UNKNOWN_SYSCALL, UNKNOWN_CSR_MODE -> 2;
+                default -> 19; // Hardware error
+            };
         }
     }
 }

@@ -50,7 +50,24 @@ public class CPU {
     }
 
     public void setRunning() {
-        state = CPUStatus.CPUState.RUNNING;
+        if (state != CPUStatus.CPUState.RUNNING) {
+            this.reset(false);
+        }
+    }
+
+    public void reset(boolean off) {
+        this.registers = new int[32];
+        this.pc = 0;
+        this.oldPc = 0;
+        this.packet = null;
+        this.interruptController = new InterruptController();
+        if (!off) {
+            this.state = CPUStatus.CPUState.RUNNING;
+        } else {
+            this.state = CPUStatus.CPUState.HALTED;
+        }
+        this.exceptionCause = CPUStatus.ExceptionCause.NONE;
+        this.cycle = 0;
     }
 
     private void flatMemWrite(int addr, byte value) {
@@ -273,7 +290,13 @@ public class CPU {
         }
 
         oldPc = pc;
-        int instr = load32(pc);
+        var instr = load32(pc);
+
+        if (instr == null) {
+            enterException(CPUStatus.ExceptionCause.INSTRUCTION_ACCESS_FAULT, pc);
+            return;
+        }
+
         pc += 4;
         int opcode = instr & 0x7F;
 
@@ -565,11 +588,36 @@ public class CPU {
         int addr = registers[rs1] + imm;
 
         switch (funct3) {
-            case 0x0 -> registers[rd] = signExtend(load8(addr), 8);   // LB
-            case 0x1 -> registers[rd] = signExtend(load16(addr), 16);  // LH
-            case 0x2 -> registers[rd] = load32(addr); // LW
-            case 0x4 -> registers[rd] = load8(addr) & 0xFF; // LBU
-            case 0x5 -> registers[rd] = load16(addr) & 0xFFFF; // LHU
+            case 0x0 -> {
+                var load = load8(addr);
+                if (load != null) {
+                    registers[rd] = signExtend(load, 8);
+                }
+            }   // LB
+            case 0x1 -> {
+                var load = load16(addr);
+                if (load != null) {
+                    registers[rd] = signExtend(load, 16);
+                }
+            }  // LH
+            case 0x2 -> {
+                var load = load32(addr);
+                if (load != null) {
+                    registers[rd] = load;
+                }
+            } // LW
+            case 0x4 -> {
+                var load = load8(addr);
+                if (load != null) {
+                    registers[rd] = load & 0xFF;
+                }
+            } // LBU
+            case 0x5 -> {
+                var load = load16(addr);
+                if (load != null) {
+                    registers[rd] = load & 0xFFFF;
+                }
+            } // LHU
             default -> enterException(CPUStatus.ExceptionCause.UNSUPPORTED_LOAD, funct3);
         }
 
