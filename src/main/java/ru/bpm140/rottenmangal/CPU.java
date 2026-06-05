@@ -49,6 +49,11 @@ public class CPU {
         return state;
     }
 
+
+    public CPUStatus.ExceptionCause getExceptionCause() {
+        return exceptionCause;
+    }
+
     public void setRunning() {
         if (state != CPUStatus.CPUState.RUNNING) {
             this.reset(false);
