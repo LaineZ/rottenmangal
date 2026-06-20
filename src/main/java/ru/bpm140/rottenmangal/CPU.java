@@ -21,6 +21,8 @@ public class CPU {
     private CPUStatus.CPUState state = CPUStatus.CPUState.HALTED;
     private CPUStatus.ExceptionCause exceptionCause = CPUStatus.ExceptionCause.NONE;
     private int cycle = 0;
+    private int entry = 0;
+
 
     private MemoryRegion findRegion(int addr) {
         for (MemoryRegion r : memory) {
@@ -62,7 +64,7 @@ public class CPU {
 
     public void reset(boolean off) {
         this.registers = new int[32];
-        this.pc = 0;
+        this.pc = entry;
         this.oldPc = 0;
         this.packet = null;
         this.interruptController = new InterruptController();
@@ -122,7 +124,7 @@ public class CPU {
             }
         }
 
-        pc = e_entry;
+        entry = e_entry;
     }
 
     public int csrRead(int addr) {
